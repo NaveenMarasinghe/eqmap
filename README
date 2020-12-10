@@ -2,5 +2,5 @@ Earthquake Location Map
 
 Example program developed for Object Oriented Programming in Java Coursera course.
 This program visualizes earthquake locations in a world map.
-GUI is developed by using Processing library.
-Map is developed by using UnfoldingMap library.
+Processing library used for GUI.
+UnfoldingMap library used for world map.

@@ -8,9 +8,16 @@ import processing.core.PApplet;
 
 //Unfolding libraries
 import de.fhpotsdam.unfolding.UnfoldingMap;
+import de.fhpotsdam.unfolding.marker.AbstractShapeMarker;
 import de.fhpotsdam.unfolding.marker.Marker;
+import de.fhpotsdam.unfolding.marker.MultiMarker;
+import de.fhpotsdam.unfolding.data.GeoJSONReader;
+import de.fhpotsdam.unfolding.data.Feature;
 import de.fhpotsdam.unfolding.data.PointFeature;
+import de.fhpotsdam.unfolding.geo.Location;
 import de.fhpotsdam.unfolding.marker.SimplePointMarker;
+//import de.fhpotsdam.unfolding.marker.AbstractShapeMarker;
+//import de.fhpotsdam.unfolding.marker.MultiMarker;
 import de.fhpotsdam.unfolding.providers.Google;
 import de.fhpotsdam.unfolding.providers.MBTilesMapProvider;
 import de.fhpotsdam.unfolding.utils.MapUtils;
@@ -40,12 +47,18 @@ public class EarthquakeCityMap extends PApplet{
 	//feed with magnitude 2.5+ Earthquakes
 	private String earthquakesURL = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.atom";
 	
+	// country data file location
+	private String countryFile = "../data/countries.geo.json";
+	
+	// A List of country markers
+	private List<Marker> countryMarkers;
+	
 	public void setup() {
 		size(950, 600, OPENGL);
 
 		if (offline) {
 		    map = new UnfoldingMap(this, 200, 50, 700, 500, new MBTilesMapProvider(mbTilesString));
-		    earthquakesURL = "2.5_week.atom"; 	//for working offline
+		    //earthquakesURL = "../data/2.5_week.atom"; 	//for working offline
 		}
 		else {
 			map = new UnfoldingMap(this, 200, 50, 700, 500, new Google.GoogleMapProvider());
@@ -56,14 +69,20 @@ public class EarthquakeCityMap extends PApplet{
 	    
 	    // The List to populate with new SimplePointMarkers
 	    List<Marker> markers = new ArrayList<Marker>();
+	    List<Feature> countries = GeoJSONReader.loadData(this, countryFile);
+	    countryMarkers = MapUtils.createSimpleMarkers(countries);
 	    
 	    //collect properties for each earthquake by parser
-	    //PointFeatures have a getLocation method
 	    List<PointFeature> earthquakes = ParseFeed.parseEarthquake(this, earthquakesURL);
 	    
 	    //add all earthquake to marker list
 	    for(PointFeature earthquake: earthquakes) {
-	    	markers.add(createMarker(earthquake));
+	    	if(isLand(earthquake)) {
+	    		markers.add(new LandQuakeMarker(earthquake));
+	    	}else {
+	    		markers.add(new OceanQuakeMarker(earthquake));
+	    	}
+	    	
 	    }
 	    
 	    // Add the markers to the map
@@ -74,10 +93,9 @@ public class EarthquakeCityMap extends PApplet{
 	/* createMarker: helper method that takes in an earthquake 
 	 * feature and returns a SimplePointMarker for that earthquake
 	*/
-	private SimplePointMarker createMarker(PointFeature feature)
+	private SimplePointMarker createLandMarker(PointFeature feature)
 	{  
 		// print all features in a PointFeature
-		// need call createMarekr from setup 
 		//System.out.println(feature.getProperties());
 		
 		// Create a new SimplePointMarker at the location given by the PointFeature
@@ -107,6 +125,7 @@ public class EarthquakeCityMap extends PApplet{
 	    return marker;
 	}
 	
+	
 	public void draw() {
 		//draw the map
 	    background(10);
@@ -116,6 +135,67 @@ public class EarthquakeCityMap extends PApplet{
 	
 	private void addKey() {	
 		//generate key field
-		rect(30,50,100,150,7);
+		fill(255, 250, 240);
+		rect(25, 50, 150, 250);
+		
+		fill(0);
+		textAlign(LEFT, CENTER);
+		textSize(12);
+		text("Earthquake Key", 50, 75);
+		
+//		fill(color(255, 0, 0));
+//		ellipse(50, 125, 15, 15);
+		fill(color(255, 255, 0));
+		ellipse(50, 175, 10, 10);
+		fill(color(0, 0, 255));
+		ellipse(50, 225, 10, 10);
+		
+		fill(0, 0, 0);
+//		text("5.0+ Magnitude", 75, 125);
+		text("In land", 75, 175);
+		text("In ocean", 75, 225);
+	}
+	
+	// return boolean value earthquake is located in land or not
+	private boolean isLand(PointFeature earthquake) {
+		
+		for(Marker m : countryMarkers) {
+			if(isCountry(earthquake, m)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	// check earthquake is located in a country
+	private boolean isCountry(PointFeature earthquake, Marker country) {
+
+		// getting location of feature
+		Location checkLoc = earthquake.getLocation();
+
+		// some countries represented it as MultiMarker
+		// looping over SimplePolygonMarkers which make them up to use isInsideByLoc
+		if(country.getClass() == MultiMarker.class) {
+				
+			// looping over markers making up MultiMarker
+			for(Marker marker : ((MultiMarker)country).getMarkers()) {
+					
+				// checking if inside
+				if(((AbstractShapeMarker)marker).isInsideByLocation(checkLoc)) {
+					earthquake.addProperty("country", country.getProperty("name"));
+						
+					// return if is inside one
+					return true;
+				}
+			}
+		}
+			
+		// check if inside country represented by SimplePolygonMarker
+		else if(((AbstractShapeMarker)country).isInsideByLocation(checkLoc)) {
+			earthquake.addProperty("country", country.getProperty("name"));
+			
+			return true;
+		}
+		return false;
 	}
 }
